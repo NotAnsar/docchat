@@ -42,3 +42,8 @@ next-env.d.ts
 
 # local documents
 doc/
+
+# AI tooling (local only)
+.claude/
+.agents/
+skills-lock.json
