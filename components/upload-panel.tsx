@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FileText, Upload } from 'lucide-react';
+import { FileText, Loader2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
 	Card,
@@ -11,8 +11,44 @@ import {
 	CardTitle,
 } from '@/components/ui/card';
 
+type Result = {
+	filename: string;
+	pageCount: number;
+	chunkCount: number;
+};
+
 export function UploadPanel() {
 	const [file, setFile] = useState<File | null>(null);
+	const [isProcessing, setIsProcessing] = useState(false);
+	const [result, setResult] = useState<Result | null>(null);
+	const [error, setError] = useState<string | null>(null);
+
+	async function processDocument() {
+		if (!file) return;
+
+		setIsProcessing(true);
+		setError(null);
+		setResult(null);
+
+		try {
+			const body = new FormData();
+			body.append('file', file);
+
+			const response = await fetch('/api/upload', { method: 'POST', body });
+			const data = await response.json();
+
+			if (!response.ok) {
+				setError(data.error ?? 'Upload failed.');
+				return;
+			}
+
+			setResult(data);
+		} catch {
+			setError('Could not reach the server. Check your connection.');
+		} finally {
+			setIsProcessing(false);
+		}
+	}
 
 	return (
 		<Card className='h-fit'>
@@ -34,7 +70,11 @@ export function UploadPanel() {
 					type='file'
 					accept='application/pdf'
 					className='sr-only'
-					onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+					onChange={(e) => {
+						setFile(e.target.files?.[0] ?? null);
+						setResult(null);
+						setError(null);
+					}}
 				/>
 
 				{file && (
@@ -44,9 +84,27 @@ export function UploadPanel() {
 					</div>
 				)}
 
-				<Button disabled={!file} className='w-full'>
-					Process document
+				<Button
+					disabled={!file || isProcessing}
+					className='w-full'
+					onClick={processDocument}
+				>
+					{isProcessing && <Loader2 className='animate-spin' />}
+					{isProcessing ? 'Processing...' : 'Process document'}
 				</Button>
+
+				{error && (
+					<p className='rounded-lg bg-destructive/10 p-3 text-sm text-destructive'>
+						{error}
+					</p>
+				)}
+
+				{result && (
+					<p className='rounded-lg bg-muted p-3 text-sm'>
+						{result.pageCount} pages split into{' '}
+						<span className='font-medium'>{result.chunkCount} passages</span>.
+					</p>
+				)}
 			</CardContent>
 		</Card>
 	);
