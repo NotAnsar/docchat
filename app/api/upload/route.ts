@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { IndexNotReadyError, storeChunks } from '@/lib/retrieval';
 import { chunkPages, extractPdfPages } from '@/lib/pdf';
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
@@ -31,19 +33,15 @@ export async function POST(request: Request) {
 		);
 	}
 
+	let chunks;
+	let pageCount;
+
 	try {
-		// uint8array is needed because the PDF library expects a byte array, not a blob.
 		const pages = await extractPdfPages(
 			new Uint8Array(await file.arrayBuffer()),
 		);
-
-		const chunks = chunkPages(pages);
-
-		return Response.json({
-			filename: file.name,
-			pageCount: pages.length,
-			chunkCount: chunks.length,
-		});
+		chunks = chunkPages(pages);
+		pageCount = pages.length;
 	} catch (error) {
 		console.error('[upload] extraction failed', error);
 
@@ -57,4 +55,32 @@ export async function POST(request: Request) {
 			{ status: 422 },
 		);
 	}
+
+	// The id ties every passage to this upload, so a question searches only
+	// the document it was asked about.
+	const documentId = randomUUID();
+
+	try {
+		await storeChunks(documentId, chunks);
+	} catch (error) {
+		console.error('[upload] embedding or storage failed', error);
+
+		// Temporary: the document is stored, the index just lagged.
+		if (error instanceof IndexNotReadyError) {
+			return Response.json({ error: error.message }, { status: 503 });
+		}
+
+		// Here the file was fine and we broke: the embedding API or the database.
+		return Response.json(
+			{ error: 'Could not process this document. Please try again.' },
+			{ status: 500 },
+		);
+	}
+
+	return Response.json({
+		documentId,
+		filename: file.name,
+		pageCount,
+		chunkCount: chunks.length,
+	});
 }
