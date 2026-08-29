@@ -12,12 +12,17 @@ import {
 } from '@/components/ui/card';
 
 type Result = {
+	documentId: string;
 	filename: string;
 	pageCount: number;
 	chunkCount: number;
 };
 
-export function UploadPanel() {
+export function UploadPanel({
+	onUploaded,
+}: {
+	onUploaded: (documentId: string) => void;
+}) {
 	const [file, setFile] = useState<File | null>(null);
 	const [isProcessing, setIsProcessing] = useState(false);
 	const [result, setResult] = useState<Result | null>(null);
@@ -43,6 +48,7 @@ export function UploadPanel() {
 			}
 
 			setResult(data);
+			onUploaded(data.documentId);
 		} catch {
 			setError('Could not reach the server. Check your connection.');
 		} finally {

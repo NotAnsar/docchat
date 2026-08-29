@@ -82,8 +82,10 @@ export async function findRelevantChunks(
 	documentId: string,
 	question: string,
 ): Promise<Match[]> {
-	const queryVector = await embedQuestion(question);
-	const collection = await getCollection<StoredChunk>(COLLECTION);
+	const [queryVector, collection] = await Promise.all([
+		embedQuestion(question),
+		getCollection<StoredChunk>(COLLECTION),
+	]);
 
 	return collection
 		.aggregate<Match>([
