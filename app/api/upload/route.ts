@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { IndexNotReadyError, storeChunks } from '@/lib/retrieval';
+import { storeChunks } from '@/lib/retrieval';
 import { chunkPages, extractPdfPages } from '@/lib/pdf';
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
@@ -14,9 +14,15 @@ const fileSchema = z
 	);
 
 export async function POST(request: Request) {
-	const formData = await request.formData();
-	const parsed = fileSchema.safeParse(formData.get('file'));
+	const formData = await request.formData().catch(() => null);
+	if (!formData) {
+		return Response.json(
+			{ error: 'Send the PDF as form data.' },
+			{ status: 400 },
+		);
+	}
 
+	const parsed = fileSchema.safeParse(formData.get('file'));
 	if (!parsed.success) {
 		return Response.json(
 			{ error: parsed.error.issues[0].message },
@@ -33,54 +39,48 @@ export async function POST(request: Request) {
 		);
 	}
 
-	let chunks;
-	let pageCount;
-
-	try {
-		const pages = await extractPdfPages(
-			new Uint8Array(await file.arrayBuffer()),
-		);
-		chunks = chunkPages(pages);
-		pageCount = pages.length;
-	} catch (error) {
-		console.error('[upload] extraction failed', error);
-
-		// The request was well formed, but this file cannot be read: a scan, or
-		// a damaged PDF. That is 422, not 500 — nothing is broken on our side.
-		return Response.json(
-			{
-				error:
-					error instanceof Error ? error.message : 'Could not read this PDF.',
-			},
-			{ status: 422 },
-		);
-	}
-
-	// The id ties every passage to this upload, so a question searches only
-	// the document it was asked about.
+	const bytes = new Uint8Array(await file.arrayBuffer());
 	const documentId = randomUUID();
 
-	try {
-		await storeChunks(documentId, chunks);
-	} catch (error) {
-		console.error('[upload] embedding or storage failed', error);
+	// Stream the stages of processing to the client, so it can show the progress.
+	const stream = new ReadableStream({
+		async start(controller) {
+			const encoder = new TextEncoder();
+			const send = (data: object) =>
+				controller.enqueue(encoder.encode(`${JSON.stringify(data)}\n`));
 
-		// Temporary: the document is stored, the index just lagged.
-		if (error instanceof IndexNotReadyError) {
-			return Response.json({ error: error.message }, { status: 503 });
-		}
+			try {
+				send({ stage: 'parsing' });
+				const pages = await extractPdfPages(bytes);
 
-		// Here the file was fine and we broke: the embedding API or the database.
-		return Response.json(
-			{ error: 'Could not process this document. Please try again.' },
-			{ status: 500 },
-		);
-	}
+				send({ stage: 'chunking' });
+				const chunks = chunkPages(pages);
 
-	return Response.json({
-		documentId,
-		filename: file.name,
-		pageCount,
-		chunkCount: chunks.length,
+				send({ stage: 'embedding' });
+				await storeChunks(documentId, chunks);
+
+				send({
+					documentId,
+					filename: file.name,
+					pageCount: pages.length,
+					chunkCount: chunks.length,
+				});
+			} catch (error) {
+				console.error('[upload] failed', error);
+				send({
+					error:
+						error instanceof Error ? error.message : 'Could not read this PDF.',
+				});
+			} finally {
+				controller.close();
+			}
+		},
+	});
+
+	return new Response(stream, {
+		headers: {
+			'Content-Type': 'application/x-ndjson',
+			'Cache-Control': 'no-store',
+		},
 	});
 }

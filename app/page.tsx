@@ -22,7 +22,7 @@ export default function Home() {
 
 			<main className='mx-auto grid w-full max-w-5xl flex-1 gap-6 p-6 md:grid-cols-[320px_1fr]'>
 				<UploadPanel onUploaded={setDocumentId} />
-				<ChatPanel documentId={documentId} />
+				<ChatPanel key={documentId ?? 'empty'} documentId={documentId} />
 			</main>
 		</div>
 	);
