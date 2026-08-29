@@ -51,14 +51,16 @@ export async function POST(request: Request) {
 		return createUIMessageStreamResponse({
 			stream: toUIMessageStream({
 				stream: result.stream,
-				// Sent once with the answer, so the UI can show what it was built from.
-				messageMetadata: () => ({
-					sources: matches.map((match) => ({
-						pageNumber: match.pageNumber,
-						score: match.score,
-						preview: truncate(match.text, SOURCE_PREVIEW_LENGTH),
-					})),
-				}),
+				messageMetadata: ({ part }) =>
+					part.type === 'finish'
+						? {
+								sources: matches.map((match) => ({
+									pageNumber: match.pageNumber,
+									score: match.score,
+									preview: truncate(match.text, SOURCE_PREVIEW_LENGTH),
+								})),
+							}
+						: undefined,
 			}),
 		});
 	} catch (error) {

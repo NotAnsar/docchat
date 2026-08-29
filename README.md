@@ -45,10 +45,10 @@ to answer from them alone and to say so plainly when the answer is not there.
 
 | Setting            | Value           | Why                                                                                                                                                                                                                                                                              |
 | ------------------ | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chunk size         | 1000 characters | About 250 tokens, verified against the tokenizer. Small enough that one passage is about one idea, so its embedding stays sharp; large enough to keep a sentence in context.                                                                                                     |
+| Chunk size         | 1000 characters | About 250 tokens for Latin script (roughly 4 characters per token). Small enough that one passage is about one idea, so its embedding stays sharp; large enough to keep a sentence in context.                                                                                                     |
 | Overlap            | 200 characters  | A sentence cut across a boundary still appears whole in one of the two passages. Without it, a split sentence can match neither.                                                                                                                                                 |
 | Passages retrieved | 5               | Enough for an answer spread across several passages, few enough that the prompt stays focused.                                                                                                                                                                                   |
-| Embedding size     | 1536            | `gemini-embedding-001` returns 3072 by default. The model is trained so a shortened vector stays meaningful, so this halves storage (~21 KB per passage instead of ~33 KB). Measured on real text, 1536 separated matching from non-matching passages slightly better than 3072. |
+| Embedding size     | 1536            | `gemini-embedding-001` returns 3072 by default. The model is trained so a shortened vector stays meaningful, so this halves storage (~21 KB per passage instead of ~42 KB — a clean 2x). Measured on real text, 1536 separated matching from non-matching passages slightly better than 3072. |
 | Similarity         | Cosine          | Compares the direction two vectors point rather than their length. Direction carries the meaning; length mostly reflects how long the text was.                                                                                                                                  |
 
 **Passages are split on line breaks, not paragraphs.** The obvious approach is to
@@ -228,5 +228,6 @@ limit once the overlap was added.
 **Scanned PDFs are rejected** with a clear message. Their pages are images and
 would need OCR.
 
-**The free Gemini tier allows 20 requests per day per model,** so heavy testing
-will exhaust it. Switching model is a one-line change; a paid key removes the cap.
+**Sources shown are the passages searched, not proven-used.** The model is given
+five passages and may use two. Having it name which ones it used would be more
+accurate.

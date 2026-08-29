@@ -5,6 +5,15 @@ import { chunkPages, extractPdfPages } from '@/lib/pdf';
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
 
+const MAX_PAGES = 50;
+
+// Embeddings are capped at 100 per minute, so dense PDFs can hit the limit
+// before the page cap.
+const MAX_PASSAGES = 100;
+
+// Embedding a document and waiting for the search index can take close to a minute.
+export const maxDuration = 60;
+
 const fileSchema = z
 	.instanceof(File, { message: 'No file was uploaded.' })
 	.refine((file) => file.size > 0, 'The file is empty.')
@@ -53,8 +62,20 @@ export async function POST(request: Request) {
 				send({ stage: 'parsing' });
 				const pages = await extractPdfPages(bytes);
 
+				if (pages.length > MAX_PAGES) {
+					throw new Error(
+						`This PDF has ${pages.length} pages and the limit is ${MAX_PAGES}.`,
+					);
+				}
+
 				send({ stage: 'chunking' });
 				const chunks = chunkPages(pages);
+
+				if (chunks.length > MAX_PASSAGES) {
+					throw new Error(
+						`This document produces ${chunks.length} passages and the limit is ${MAX_PASSAGES}. Please try a shorter document.`,
+					);
+				}
 
 				send({ stage: 'embedding' });
 				await storeChunks(documentId, chunks);

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, FileText, Loader2, Upload } from 'lucide-react';
+import { Check, FileText, Loader2 } from 'lucide-react';
+import { PdfDropzone } from '@/components/pdf-dropzone';
 import { Button } from '@/components/ui/button';
 import {
 	Card,
@@ -10,8 +11,6 @@ import {
 	CardHeader,
 	CardTitle,
 } from '@/components/ui/card';
-
-const MAX_FILE_SIZE = 4 * 1024 * 1024;
 
 // The stages the upload endpoint reports, in the order it reports them.
 const STAGES = [
@@ -41,32 +40,16 @@ export function UploadPanel({
 
 	const isProcessing = stage !== null;
 
-	function selectFile(selected: File | null) {
+	function reset() {
 		setResult(null);
 		setError(null);
-
-		if (!selected) return setFile(null);
-
-		if (selected.type !== 'application/pdf') {
-			setFile(null);
-			return setError('Only PDF files are accepted.');
-		}
-
-		if (selected.size > MAX_FILE_SIZE) {
-			setFile(null);
-			const size = (selected.size / 1024 / 1024).toFixed(1);
-			return setError(`That file is ${size} MB. The limit is 4 MB.`);
-		}
-
-		setFile(selected);
 	}
 
 	async function processDocument() {
 		if (!file) return;
 
 		setStage('parsing');
-		setError(null);
-		setResult(null);
+		reset();
 
 		try {
 			const body = new FormData();
@@ -80,7 +63,8 @@ export function UploadPanel({
 				return;
 			}
 
-			// The server responds with a stream of JSON lines, each reporting the current stage or the final result.
+			// The server responds with one JSON object per line, reporting the
+			// current stage and finally the result.
 			await readStream(response, (data) => {
 				if ('stage' in data) setStage(data.stage as Stage);
 				else if ('error' in data) setError(String(data.error));
@@ -101,23 +85,20 @@ export function UploadPanel({
 		<Card className='h-fit'>
 			<CardHeader>
 				<CardTitle>Document</CardTitle>
-				<CardDescription>PDF with selectable text, up to 4 MB</CardDescription>
+				<CardDescription>PDF with selectable text, up to 4 MB and 50 pages</CardDescription>
 			</CardHeader>
 			<CardContent className='flex flex-col gap-3'>
-				<label
-					htmlFor='pdf-upload'
-					className='flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed p-8 text-center transition-colors hover:bg-muted'
-				>
-					<Upload className='size-6 text-muted-foreground' />
-					<span className='text-sm font-medium'>Choose a PDF</span>
-					<span className='text-xs text-muted-foreground'>or drag it here</span>
-				</label>
-				<input
-					id='pdf-upload'
-					type='file'
-					accept='application/pdf'
-					className='sr-only'
-					onChange={(e) => selectFile(e.target.files?.[0] ?? null)}
+				<PdfDropzone
+					disabled={isProcessing}
+					onSelect={(selected) => {
+						reset();
+						setFile(selected);
+					}}
+					onReject={(message) => {
+						setFile(null);
+						setResult(null);
+						setError(message);
+					}}
 				/>
 
 				{file && (
