@@ -61,11 +61,12 @@ export function chunkPages(pages: PageText[]): Chunk[] {
 }
 
 function splitPage(text: string): string[] {
-	// Split on line breaks, then hard split long lines. Filter out empty segments.
+	const maxSegment = CHUNK_SIZE - CHUNK_OVERLAP - 1;
+
 	const segments = text
 		.split('\n')
 		.flatMap((line) =>
-			line.length <= CHUNK_SIZE ? [line] : hardSplit(line, CHUNK_SIZE),
+			line.length <= maxSegment ? [line] : hardSplit(line, maxSegment),
 		)
 		.filter((segment) => segment.trim().length > 0);
 
