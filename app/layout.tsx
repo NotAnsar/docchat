@@ -1,23 +1,37 @@
-import type { Metadata } from 'next';
-import { Poppins } from 'next/font/google';
+import type { Metadata, Viewport } from 'next';
+import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
 
-const poppins = Poppins({
-	variable: '--font-sans',
+const sans = Geist({
+	variable: '--font-geist-sans',
 	subsets: ['latin'],
-	weight: ['400', '500', '600', '700'],
+	display: 'swap',
+});
+
+const mono = Geist_Mono({
+	variable: '--font-geist-mono',
+	subsets: ['latin'],
+	display: 'swap',
 });
 
 export const metadata: Metadata = {
-	title: 'DocChat',
-	description: 'Ask questions about your PDF documents',
+	title: 'DocChat — question your PDFs',
+	description:
+		'Upload a PDF and ask questions about it. Every answer is built from passages retrieved out of the document and cited by page.',
+};
+
+export const viewport: Viewport = {
+	themeColor: '#fafafb',
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
 	return (
-		<html lang='en' className={cn(poppins.variable, 'h-full antialiased')}>
-			<body className='min-h-full flex flex-col'>{children}</body>
+		<html
+			lang='en'
+			className={cn(sans.variable, mono.variable, 'h-full antialiased')}
+		>
+			<body className='flex min-h-full flex-col'>{children}</body>
 		</html>
 	);
 }

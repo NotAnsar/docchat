@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, FileText, Loader2 } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { PdfDropzone } from '@/components/pdf-dropzone';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,6 +11,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from '@/components/ui/card';
+import { Alert, Stat, StepList } from '@/components/ui/feedback';
 
 // The stages the upload endpoint reports, in the order it reports them.
 const STAGES = [
@@ -82,13 +83,17 @@ export function UploadPanel({
 	}
 
 	return (
-		<Card className='h-fit'>
+		<Card className='gap-4 lg:sticky lg:top-19'>
 			<CardHeader>
 				<CardTitle>Document</CardTitle>
-				<CardDescription>PDF with selectable text, up to 4 MB and 50 pages</CardDescription>
+				<CardDescription className='text-xs'>
+					PDF with selectable text, up to 4&nbsp;MB and 50 pages
+				</CardDescription>
 			</CardHeader>
+
 			<CardContent className='flex flex-col gap-3'>
 				<PdfDropzone
+					selected={file}
 					disabled={isProcessing}
 					onSelect={(selected) => {
 						reset();
@@ -99,64 +104,56 @@ export function UploadPanel({
 						setResult(null);
 						setError(message);
 					}}
+					onClear={() => {
+						setFile(null);
+						reset();
+					}}
 				/>
-
-				{file && (
-					<div className='flex items-center gap-2 rounded-lg border bg-background p-3 text-sm'>
-						<FileText className='size-4 shrink-0 text-primary' />
-						<span className='truncate'>{file.name}</span>
-					</div>
-				)}
 
 				<Button
 					disabled={!file || isProcessing}
 					className='w-full'
 					onClick={processDocument}
 				>
-					{isProcessing ? 'Processing...' : 'Process document'}
+					{isProcessing ? (
+						<>
+							<Loader2 className='animate-spin' aria-hidden='true' />
+							Processing…
+						</>
+					) : (
+						'Process document'
+					)}
 				</Button>
 
-				{stage && <StageList current={stage} />}
-
-				{error && (
-					<p className='rounded-lg bg-destructive/10 p-3 text-sm text-destructive'>
-						{error}
-					</p>
+				{stage && (
+					<StepList
+						steps={STAGES}
+						currentIndex={STAGES.findIndex((s) => s.id === stage)}
+					/>
 				)}
 
-				{result && (
-					<p className='rounded-lg bg-muted p-3 text-sm'>
-						{result.pageCount} pages split into{' '}
-						<span className='font-medium'>{result.chunkCount} passages</span>.
-					</p>
+				{error && <Alert className='text-xs'>{error}</Alert>}
+
+				{/* What the document became once indexed. These are the same
+				    passages the citations under each answer point back into. */}
+				{result && !isProcessing && (
+					<div className='flex flex-col gap-2.5' aria-live='polite'>
+						<p className='flex items-center gap-1.5 text-xs font-medium text-brand'>
+							<Check aria-hidden='true' className='size-3.5' />
+							Indexed and ready
+						</p>
+
+						<dl className='grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border'>
+							<Stat label='Pages' value={result.pageCount} />
+							<Stat label='Passages' value={result.chunkCount} />
+						</dl>
+					</div>
 				)}
 			</CardContent>
 		</Card>
 	);
 }
 
-function StageList({ current }: { current: Stage }) {
-	const currentIndex = STAGES.findIndex((stage) => stage.id === current);
-
-	return (
-		<ul className='flex flex-col gap-2 rounded-lg border p-3'>
-			{STAGES.map((stage, i) => (
-				<li key={stage.id} className='flex items-center gap-2 text-sm'>
-					{i < currentIndex ? (
-						<Check className='size-4 text-primary' />
-					) : i === currentIndex ? (
-						<Loader2 className='size-4 animate-spin text-primary' />
-					) : (
-						<span className='size-4' />
-					)}
-					<span className={i <= currentIndex ? '' : 'text-muted-foreground'}>
-						{stage.label}
-					</span>
-				</li>
-			))}
-		</ul>
-	);
-}
 
 // Reads a newline-delimited JSON response, calling onLine for each object.
 async function readStream(

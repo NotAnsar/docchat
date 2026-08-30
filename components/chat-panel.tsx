@@ -3,21 +3,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
-import { Send } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { ArrowUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { Alert, TextSkeleton, TypingDots } from '@/components/ui/feedback';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Sources, type Source } from '@/components/ui/sources';
+import { cn } from '@/lib/utils';
 
 // The server attaches the passages it used to the answer message.
-type Source = { pageNumber: number; score: number; preview: string };
 type Metadata = { sources?: Source[] };
 type ChatMessage = UIMessage<Metadata>;
 
@@ -38,51 +33,68 @@ export function ChatPanel({ documentId }: { documentId: string | null }) {
 	}, [messages]);
 
 	const isBusy = status === 'submitted' || status === 'streaming';
-	const canSend = documentId !== null && question.trim() !== '' && !isBusy;
+	const isReady = documentId !== null;
+	const canSend = isReady && question.trim() !== '' && !isBusy;
 
 	return (
-		<Card className='flex h-[80vh] flex-col'>
-			<CardHeader className='border-b'>
-				<CardTitle>Chat</CardTitle>
-				<CardDescription>
-					Answers come only from the uploaded document
-				</CardDescription>
-			</CardHeader>
-			<CardContent className='flex min-h-0 flex-1 flex-col gap-4 pt-4'>
-				<ScrollArea className='min-h-0 flex-1 pr-2'>
-					<div className='flex flex-col gap-4'>
-						{messages.length === 0 && (
-							<p className='py-8 text-center text-sm text-muted-foreground'>
-								{documentId
-									? 'Ask a question about the document.'
-									: 'Upload a PDF to start.'}
-							</p>
-						)}
+		<Card className='flex h-[calc(100dvh-6.5rem)] min-h-125 flex-col gap-0 py-0'>
+			<div className='flex items-center gap-2.5 border-b border-border px-4 py-3'>
+				<h2 className='text-sm font-medium'>Chat</h2>
 
-						{messages.map((message, i) => (
-							<MessageBubble
-								key={message.id}
-								message={message}
-								isLoading={isBusy && i === messages.length - 1}
-							/>
-						))}
+				<span
+					className={cn(
+						'label-xs rounded-full px-2 py-1',
+						isReady
+							? 'bg-brand-subtle text-brand'
+							: 'bg-muted text-muted-foreground',
+					)}
+				>
+					{isReady ? 'Document Loaded' : 'No document'}
+				</span>
+			</div>
 
-						{status === 'submitted' && (
-							<p className='text-sm text-muted-foreground'>Searching the document...</p>
-						)}
+			<ScrollArea className='min-h-0 flex-1'>
+				<div className='flex flex-col gap-6 px-4 py-5'>
+					{messages.length === 0 && (
+						<p className='px-6 py-14 text-center text-sm leading-relaxed text-balance text-muted-foreground'>
+							{isReady
+								? 'Ask a question about the document. Every answer lists the pages it drew on.'
+								: 'Upload a PDF to start. Once it is indexed, you can question it here.'}
+						</p>
+					)}
 
-						{error && (
-							<p className='rounded-lg bg-destructive/10 p-3 text-sm text-destructive'>
-								Something went wrong. Please try again.
-							</p>
-						)}
+					{messages.map((message, i) => (
+						<MessageBubble
+							key={message.id}
+							message={message}
+							isLoading={isBusy && i === messages.length - 1}
+						/>
+					))}
 
-						<div ref={bottomRef} />
-					</div>
-				</ScrollArea>
+					{status === 'submitted' && (
+						<p
+							aria-live='polite'
+							className='flex items-center gap-2 text-sm text-muted-foreground'
+						>
+							<TypingDots />
+							Searching the document…
+						</p>
+					)}
 
+					{error && <Alert>Something went wrong. Please try again.</Alert>}
+
+					<div ref={bottomRef} />
+				</div>
+			</ScrollArea>
+
+			<div className='border-t border-border p-3'>
 				<form
-					className='flex gap-2'
+					className={cn(
+						'flex items-end gap-2 rounded-lg border border-input bg-background p-1.5 pl-3',
+						'transition-[border-color,box-shadow] duration-150',
+						'focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50',
+						!isReady && 'opacity-60',
+					)}
 					onSubmit={(e) => {
 						e.preventDefault();
 						if (!canSend) return;
@@ -91,21 +103,35 @@ export function ChatPanel({ documentId }: { documentId: string | null }) {
 						setQuestion('');
 					}}
 				>
+					<label htmlFor='question' className='sr-only'>
+						Your question about the document
+					</label>
+
 					<Input
+						id='question'
+						name='question'
 						value={question}
 						onChange={(e) => setQuestion(e.target.value)}
+						autoComplete='off'
 						placeholder={
-							documentId
-								? 'Ask a question about the document...'
-								: 'Upload a document first'
+							isReady
+								? 'Ask about this document…'
+								: 'Process a document to start asking…'
 						}
-						disabled={documentId === null}
+						disabled={!isReady}
+						className='h-8 rounded-none border-0 bg-transparent px-0 focus-visible:border-0 focus-visible:ring-0 disabled:bg-transparent'
 					/>
-					<Button type='submit' size='icon' disabled={!canSend}>
-						<Send />
+
+					<Button
+						type='submit'
+						size='icon-sm'
+						aria-label='Send question'
+						disabled={!canSend}
+					>
+						<ArrowUp />
 					</Button>
 				</form>
-			</CardContent>
+			</div>
 		</Card>
 	);
 }
@@ -125,48 +151,23 @@ function MessageBubble({
 
 	const sources = message.metadata?.sources;
 
+	// Questions are compact and right-aligned; answers run the full width of
+	// the surface, so the passages underneath line up with the text they back.
+	if (message.role === 'user') {
+		return (
+			<p className='ml-auto max-w-[85%] animate-enter rounded-lg rounded-br-sm bg-primary px-3.5 py-2 text-sm leading-relaxed break-words text-primary-foreground'>
+				{text}
+			</p>
+		);
+	}
+
 	return (
-		<div
-			className={
-				message.role === 'user'
-					? 'ml-auto max-w-[85%] rounded-xl bg-primary px-4 py-2.5 text-sm text-primary-foreground'
-					: 'mr-auto max-w-[85%] rounded-xl bg-muted px-4 py-2.5 text-sm'
-			}
-		>
-			{/* The passages retrieved for this question. They are what the model
-			    was given, which is not always what it ended up using. */}
-			{sources && sources.length > 0 && (
-				<div className='mt-3 mb-2 flex flex-col gap-2 border-b pb-2'>
-					<p className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
-						Passages searched
-					</p>
-					{sources.map((source, i) => (
-						<div key={i} className='flex flex-col gap-1'>
-							<div className='flex items-center gap-2'>
-								<Badge variant='outline'>page {source.pageNumber}</Badge>
-								<span className='text-xs text-muted-foreground'>
-									{Math.round(source.score * 100)}% match
-								</span>
-							</div>
-							<p className='text-xs text-muted-foreground italic'>
-								&ldquo;{source.preview}&rdquo;
-							</p>
-						</div>
-					))}
-				</div>
-			)}
-
+		<div className='flex animate-enter flex-col gap-3'>
 			{text && (
-				<p className='leading-relaxed whitespace-pre-wrap text-sm'>{text}</p>
+				<p className='text-sm leading-relaxed whitespace-pre-wrap'>{text}</p>
 			)}
 
-			{!text && isLoading && (
-				<span className='flex animate-pulse flex-col gap-2 py-1'>
-					<span className='h-2.5 w-48 rounded bg-current opacity-20' />
-					<span className='h-2.5 w-40 rounded bg-current opacity-20' />
-					<span className='h-2.5 w-24 rounded bg-current opacity-20' />
-				</span>
-			)}
+			{!text && isLoading && <TextSkeleton />}
 
 			{/* Finished with nothing to show: the request failed mid-stream. */}
 			{!text && !isLoading && (
@@ -174,6 +175,8 @@ function MessageBubble({
 					No answer came back. Please ask again.
 				</p>
 			)}
+
+			{sources && sources.length > 0 && <Sources sources={sources} />}
 		</div>
 	);
 }

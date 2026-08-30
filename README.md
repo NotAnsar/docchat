@@ -99,22 +99,29 @@ really contains it — not whether the wording matches.
 
 | # | Question | Expected | Answer | Top match | Result |
 |---|---|---|---|---|---|
-| 1 | Which CI/CD orchestrator was chosen, and why over the alternative? | Jenkins, for flexibility and hands-on infrastructure experience | "Jenkins was chosen as the CI/CD orchestrator over GitHub Actions... greater flexibility, deeper learning opportunities, and hands-on experience with infrastructure, troubleshooting, and system administration (page 10)." | p.10 · 88.6% | pass |
-| 2 | Which tool performs static code analysis, and where does it run? | SonarQube, on its own Compute Engine VM | "SonarQube performs static code analysis, and it runs on a dedicated Compute Engine virtual machine (page 4)." | p.9 · 83.5% | pass |
+| 1 | Which CI/CD orchestrator was chosen, and why over the alternative? | Jenkins, for flexibility and hands-on infrastructure experience | "Jenkins was selected over GitHub Actions (page 10). It was chosen because, while GitHub Actions would have been simpler to set up, Jenkins provided greater flexibility and deeper learning opportunities, such as hands-on experience with infrastructure, troubleshooting, and system administration (page 10)." | p.9 · 86.9% | pass |
+| 2 | Which tool performs static code analysis, and where does it run? | SonarQube, on its own Compute Engine VM | "SonarQube performs static code analysis, and it is hosted on a dedicated Compute Engine virtual machine (page 3)." | p.10 · 83.9% | fact right, page wrong |
 | 3 | Where are the built Docker images stored? | Docker Hub | "The built Docker images are stored on Docker Hub (page 5)." | p.5 · 82.0% | pass |
-| 4 | Combien de temps prend le pipeline après optimisation ? *(asked in French)* | About 13 minutes, answered in French | "Après l'optimisation, le pipeline prend environ 13 minutes (page 7)." | p.7 · 86.1% | pass |
-| 5 | What is the recipe for chocolate cake? | Refusal — not in the document | "The document does not cover this." | p.2 · 74.7% | pass |
+| 4 | Combien de temps prend le pipeline après optimisation ? *(asked in French)* | About 13 minutes, answered in French | "Le pipeline prend environ 13 minutes après optimisation (page 7, page 12)." | p.7 · 86.1% | pass |
+| 5 | What is the recipe for chocolate cake? | Refusal — not in the document | "The document does not cover it." | p.11 · 75.2% | pass |
 
-**5 / 5.** Every cited page was checked against the source document.
+**4 / 5.** Every cited page was checked against the source document.
+
+Question 2 is the one that fails, and it is the useful row. The fact is right —
+SonarQube does run on its own Compute Engine VM — but it cites page 3, and that
+sentence is on page 5. Page 3 is the introduction and was not among the five
+passages retrieved. So retrieval worked and the model attached a page number that
+came from nowhere. This is why the sources panel shows the real pages next to
+every answer: the reader can check the citation rather than trust it.
 
 Question 4 is asked in French against an English document: retrieval works across
 languages, and the answer comes back in the language of the question.
 
 Question 5 is the important one. The document has nothing about cake, yet the
-closest passage still scored **74.7%** — which is why there is no similarity
+closest passage still scored **75.2%** — which is why there is no similarity
 threshold. The refusal comes from the prompt, not from a score comparison.
 
-Median response time was **1.8s**, and each answer plus its five source passages
+Median response time was **1.5s**, and each answer plus its five source passages
 totalled about **2.5 KB**.
 
 ## Tech choices
