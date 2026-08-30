@@ -310,15 +310,10 @@ the chunk size could push a chunk past its limit once the overlap was added.
 **Scanned PDFs are rejected** with a clear message. Their pages are images and
 would need OCR.
 
-**Arabic is not supported.** French and English work, but extraction returns
-Arabic as presentation forms in visual rather than logical order. Measured on a
-test document: 62% of the characters came back in the `U+FB50–FEFF` shaping
-block instead of the base `U+0600–06FF` range, with the words reversed. Those
-passages still embed and still score highly, so the answer looks confident and is
-wrong — the worst possible failure. Reading it properly means mapping the glyphs
-back to base letters and reversing each bidirectional run, which is a larger job
-than it looks; detecting the shaping block and refusing the file is the honest
-short-term fix.
+**Arabic mostly works.** PDF files store Arabic letters in a special display form
+that the embedding model does not recognise. One line of code turns them back
+into normal letters, and the answers got much better after that. The words still
+come out in reverse order, so the source previews are hard to read.
 
 **Sources shown are the passages searched, not proven-used.** The model is given
 five passages and may use two. Having it name which ones it used would be more

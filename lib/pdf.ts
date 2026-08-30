@@ -29,6 +29,9 @@ export async function extractPdfPages(data: Uint8Array): Promise<PageText[]> {
 			pageNumber: index + 1,
 			// Collapse layout spacing, but keep line breaks: chunking splits on them.
 			text: raw
+				// Normalize Unicode compatibility forms, including Arabic presentation
+				// forms that may appear in extracted PDF text, to standard characters.
+				.normalize('NFKC')
 				.replace(/\r\n/g, '\n')
 				.replace(/[ \t]+/g, ' ')
 				.trim(),
