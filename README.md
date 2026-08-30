@@ -173,6 +173,10 @@ stream instead of as a status code.
   asynchronously, so a question asked immediately after an upload could find
   nothing. Uploading waits until the passages really are searchable before
   reporting success.
+- **Logs are one JSON line per event.** Vercel captures stdout, so JSON can be
+  filtered rather than read by eye. Uploads record a duration per stage, which
+  separates a slow extraction from a slow embedding. Question and passage text
+  are never logged — the documents are private.
 
 ---
 
@@ -221,7 +225,7 @@ with every token.
 | Status | When                                                                  |
 | ------ | --------------------------------------------------------------------- |
 | 200    | The answer streams back                                               |
-| 400    | `documentId` missing, no messages, or no text in the last user message |
+| 400    | `documentId` missing, no messages, no text in the last user message, more than 50 messages, or a question over 4000 characters |
 | 500    | Retrieval or the model failed                                          |
 
 **The whole conversation is sent to the model, but only the newest question is
@@ -282,6 +286,7 @@ lib/
   mongodb.ts            cached database connection
   retrieval.ts          store passages and search them
   prompt.ts             build the grounded prompt
+  logger.ts             one JSON line per event
   pdf.test.ts           chunking tests
   prompt.test.ts        prompt building tests
 components/
