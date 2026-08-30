@@ -87,6 +87,36 @@ the passages do not contain the answer, and it does.
 
 ---
 
+## Evaluation
+
+Five questions run against the live deployment on
+[`examples/Rapport_Projet_metier_devops.pdf`](examples/Rapport_Projet_metier_devops.pdf)
+(13 pages, 33 passages). Scores are the top retrieval match for that question.
+
+Answers are quoted from one run. The model does not return the same sentence
+twice, so what is checked is whether the claim is correct and the cited page
+really contains it — not whether the wording matches.
+
+| # | Question | Expected | Answer | Top match | Result |
+|---|---|---|---|---|---|
+| 1 | Which CI/CD orchestrator was chosen, and why over the alternative? | Jenkins, for flexibility and hands-on infrastructure experience | "Jenkins was chosen as the CI/CD orchestrator over GitHub Actions... greater flexibility, deeper learning opportunities, and hands-on experience with infrastructure, troubleshooting, and system administration (page 10)." | p.10 · 88.6% | pass |
+| 2 | Which tool performs static code analysis, and where does it run? | SonarQube, on its own Compute Engine VM | "SonarQube performs static code analysis, and it runs on a dedicated Compute Engine virtual machine (page 4)." | p.9 · 83.5% | pass |
+| 3 | Where are the built Docker images stored? | Docker Hub | "The built Docker images are stored on Docker Hub (page 5)." | p.5 · 82.0% | pass |
+| 4 | Combien de temps prend le pipeline après optimisation ? *(asked in French)* | About 13 minutes, answered in French | "Après l'optimisation, le pipeline prend environ 13 minutes (page 7)." | p.7 · 86.1% | pass |
+| 5 | What is the recipe for chocolate cake? | Refusal — not in the document | "The document does not cover this." | p.2 · 74.7% | pass |
+
+**5 / 5.** Every cited page was checked against the source document.
+
+Question 4 is asked in French against an English document: retrieval works across
+languages, and the answer comes back in the language of the question.
+
+Question 5 is the important one. The document has nothing about cake, yet the
+closest passage still scored **74.7%** — which is why there is no similarity
+threshold. The refusal comes from the prompt, not from a score comparison.
+
+Median response time was **1.8s**, and each answer plus its five source passages
+totalled about **2.5 KB**.
+
 ## Tech choices
 
 | Choice                                | Why                                                                                                                                                                                                                                                                                                         |
@@ -101,18 +131,29 @@ the passages do not contain the answer, and it does.
 ### Why not LangChain
 
 LangChain packages these steps behind its own abstractions. This pipeline is
-about 200 lines — extract, chunk, embed, search, prompt — and writing it directly
-keeps the chunking strategy, the retrieval parameters and the prompt visible in a
-few small files instead of configured through a framework. Its recursive text
+about 300 lines across five files in `lib/` — extract, chunk, embed, search,
+prompt — and writing it directly keeps the chunking strategy, the retrieval
+parameters and the prompt visible instead of configured through a framework. Its recursive text
 splitter would be worth adopting if this had to handle arbitrary document types;
 for these documents, line-break splitting measured better.
 
+### Limits
+
+Three caps are enforced on upload, each for a different reason.
+
+| Limit     | Value | Why                                                                                                                                                                                                                                                     |
+| --------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File size | 4 MB  | A serverless request body is limited to about 4.5 MB. Checked in the browser for instant feedback and again on the server, which is the check that actually protects the endpoint. Larger files would need a direct-to-storage upload.                    |
+| Pages     | 50    | Processing time scales with page count against a 60-second function timeout. This is the coarse guard — in practice the passage cap below usually rejects a long document first.                                                                         |
+| Passages  | 100   | The embedding API allows 100 requests per minute and counts each passage separately, so a dense PDF hits that ceiling before the page cap does. Measured at 2.1–3.0 passages per page across three documents, so 100 passages is roughly 33–47 pages. |
+
+The file-size check runs before the response stream opens, so it returns a real
+`413`. The page and passage counts are only known after extraction, by which
+point the `200` has been sent — those two arrive as an error line inside the
+stream instead of as a status code.
+
 ### Serverless constraints
 
-- **Uploads are capped at 4 MB.** Serverless request bodies are limited to about
-  4.5 MB. The limit is checked in the browser for instant feedback and again on
-  the server, which is the check that actually protects the endpoint. Larger
-  files would need a direct-to-storage upload.
 - **The database client is cached per process.** A serverless function serves
   many requests, so connecting on each one would exhaust the connection pool. The
   connection promise is created once and reused, and kept on `globalThis` so hot
@@ -138,7 +179,7 @@ Multipart form data with a `file` field. Responds with newline-delimited JSON:
 {"stage":"parsing"}
 {"stage":"chunking"}
 {"stage":"embedding"}
-{"documentId":"...","filename":"...","pageCount":15,"chunkCount":34}
+{"documentId":"...","filename":"...","pageCount":13,"chunkCount":33}
 ```
 
 | Status | When                                                |
@@ -146,6 +187,14 @@ Multipart form data with a `file` field. Responds with newline-delimited JSON:
 | 200    | Accepted; progress and result follow in the stream  |
 | 400    | No file, empty file, not a PDF, or a malformed body |
 | 413    | Larger than 4 MB                                    |
+
+More than 50 pages, more than 100 passages, or a scanned PDF cannot be detected
+until the file has been read, so they are reported inside the stream instead:
+
+```
+{"stage":"parsing"}
+{"error":"This PDF has 77 pages and the limit is 50."}
+```
 
 ### `POST /api/chat`
 
@@ -158,8 +207,21 @@ Multipart form data with a `file` field. Responds with newline-delimited JSON:
 }
 ```
 
-Streams the answer token by token, with the passages it searched attached as
-message metadata. `400` if `documentId` or the messages are missing.
+Streams the answer token by token. The passages it searched are attached as
+message metadata on the final frame only, so the same source block is not resent
+with every token.
+
+| Status | When                                                                  |
+| ------ | --------------------------------------------------------------------- |
+| 200    | The answer streams back                                               |
+| 400    | `documentId` missing, no messages, or no text in the last user message |
+| 500    | Retrieval or the model failed                                          |
+
+**The whole conversation is sent to the model, but only the newest question is
+used for retrieval.** The model sees the history and can resolve "it" in a
+follow-up; the vector search cannot, so "and where does it run?" is searched on
+those five words alone. Rewriting a follow-up into a standalone question before
+searching is the usual fix, and it is not implemented here.
 
 ---
 
@@ -213,13 +275,21 @@ lib/
   mongodb.ts            cached database connection
   retrieval.ts          store passages and search them
   prompt.ts             build the grounded prompt
-components/             upload panel, chat panel, shadcn/ui
+  pdf.test.ts           chunking tests
+  prompt.test.ts        prompt building tests
+components/
+  pdf-dropzone.tsx      drag and drop, rejects non-PDFs before upload
+  upload-panel.tsx      progress stages and result
+  chat-panel.tsx        session history, streamed answers, sources
+  ui/                   shadcn/ui
+examples/               sample PDF used for the evaluation above
 scripts/                one-time vector index setup
 ```
 
-Tests cover the two pure functions: chunking and prompt building. Writing them
-caught a real bug — a line longer than the chunk size could push a chunk past its
-limit once the overlap was added.
+Tests cover the two pure functions: chunking and prompt building. Everything else
+talks to Gemini, MongoDB or the browser, so testing it would mean mocking the
+part that actually matters. Writing these caught a real bug — a line longer than
+the chunk size could push a chunk past its limit once the overlap was added.
 
 ---
 
@@ -227,6 +297,16 @@ limit once the overlap was added.
 
 **Scanned PDFs are rejected** with a clear message. Their pages are images and
 would need OCR.
+
+**Arabic is not supported.** French and English work, but extraction returns
+Arabic as presentation forms in visual rather than logical order. Measured on a
+test document: 62% of the characters came back in the `U+FB50–FEFF` shaping
+block instead of the base `U+0600–06FF` range, with the words reversed. Those
+passages still embed and still score highly, so the answer looks confident and is
+wrong — the worst possible failure. Reading it properly means mapping the glyphs
+back to base letters and reversing each bidirectional run, which is a larger job
+than it looks; detecting the shaping block and refusing the file is the honest
+short-term fix.
 
 **Sources shown are the passages searched, not proven-used.** The model is given
 five passages and may use two. Having it name which ones it used would be more
